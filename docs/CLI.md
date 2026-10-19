@@ -8,6 +8,7 @@ The CLI shares all matching logic with the public Node.js library. It never rewr
 cleanary [analyse] [file|-] [options]
 cleanary clean [file|-] [--mode dedupe|unique] [options]
 cleanary duplicates [file|-] [--counts|--json] [options]
+cleanary replace <file|-> <search> [replacement] [options]
 ```
 
 `analyse` (also `analyze`) is the default command and prints a human-readable summary. The input defaults to stdin, allowing shell pipelines. `--help` and `--version` do not consume stdin.
@@ -29,13 +30,27 @@ For `a, b, a, a, c, b`:
 
 `clean --mode dedupe` returns `a, b, c`. `clean --mode unique` returns `c`. The `duplicates` command prints `a, b` once each, not all five repeated rows; add `--counts` to print `3\ta` and `2\tb`, or `--json` for structured data.
 
+### Literal replacement
+
+```bash
+cleanary replace headlines.txt "FMA warnt vor Angeboten der " "" --filepath headlines-clean.txt
+cleanary replace headlines.txt "old" "new" --ignore-case
+cat headlines.txt | cleanary replace - "unwanted prefix "
+```
+
+`replace` requires an input path or `-` for stdin, a non-empty search string, and an optional replacement string. The default replacement is empty; passing `""` also removes matches. Every occurrence is replaced in every row, with case-sensitive matching by default. `--ignore-case` uses Unicode case-insensitive matching while retaining the literal meaning of the search string.
+
+Search and replacement must be single-line strings: LF and CR are rejected. Regex punctuation such as `.*` in the search and dollar sequences such as `$&` in the replacement are treated literally. To use text beginning with a CLI flag, place `--` before all positional arguments, for example `cleanary replace -- headlines.txt "--prefix" ""`.
+
+Replacement preserves row order, duplicate and empty rows, the BOM, and exact line endings, including mixed LF/CRLF or CR and a missing final newline. It emits plain text and supports `--filepath`, `--output`, `-o`, `--stdout`, `--max-bytes`, and `--verbose`. Duplicate-specific options (`--trim`, `--mode`, `--counts`, `--json`, `--top`, `--check`) are rejected. To deduplicate the replaced text, pipe it into `cleanary clean`.
+
 ### Options
 
 | Flag | Purpose |
 | --- | --- |
-| `--ignore-case` | Compare values after `.toLowerCase()` |
+| `--ignore-case` | Compare duplicate keys after `.toLowerCase()`; use Unicode case-insensitive matching for replacement |
 | `--case-sensitive` | Exact case-sensitive comparison (default) |
-| `--trim` | Ignore leading and trailing whitespace in matching keys |
+| `--trim` | Ignore leading and trailing whitespace in duplicate matching keys; unsupported for `replace` |
 | `--mode dedupe\|unique` | Clean mode (default: `dedupe`) |
 | `--counts` | Count + tab + original first value in `duplicates` |
 | `--json` | JSON for `analyse` / `duplicates` |
@@ -60,8 +75,9 @@ cleanary analyse corpus.txt --check || echo "Duplicates found"
 cleanary clean corpus.txt --ignore-case --trim > collapsed.txt
 cleanary clean corpus.txt --mode unique -o unique.txt
 cat corpus.txt | cleanary duplicates --counts | sort -nr
+cleanary replace headlines.txt "FMA warnt vor Angeboten der " | cleanary clean > unique-headlines.txt
 ```
 
 **Exit codes:** 0 success, 1 I/O or exceeded byte limit, 2 argument/validation/UTF-8 error, 3 duplicates detected with `analyse --check`. Normal operations always exit 0 even when duplicates exist.
 
-**Data model:** Cleanary compares one row per LF (`\n`) or CRLF (`\r\n`). It preserves the original first version in `dedupe` mode and relative ordering in both modes. Mixed line endings become uniform using the first encountered style. Empty lines are counted, and an optional initial BOM is accepted. Unicode case folding is based on JavaScript lowercasing; it is not fuzzy matching.
+**Data model:** Duplicate operations compare one row per LF (`\n`) or CRLF (`\r\n`). They preserve the original first version in `dedupe` mode and relative ordering in both modes. Mixed line endings become uniform using the first encountered style. Empty lines are counted, and an optional initial BOM is preserved. Duplicate comparison without case sensitivity uses JavaScript lowercasing; it is not fuzzy matching. The `replace` command preserves every original line ending and keeps matches within each row.

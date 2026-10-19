@@ -1,3 +1,8 @@
+export interface ReplacementOptions {
+  /** Exact literal matching by default; false enables Unicode case-insensitive matching. */
+  caseSensitive?: boolean;
+}
+
 export interface NormalizationOptions {
   /** Exact matching is the default. Set false to use Unicode lowercasing. */
   caseSensitive?: boolean;
@@ -43,6 +48,10 @@ export function analyseText(text: string, options?: NormalizationOptions): Analy
 export const analyzeText: typeof analyseText;
 export function findDuplicateText(text: string, options?: NormalizationOptions): DuplicateGroup[];
 export function cleanText(text: string, options?: CleanOptions): string;
+/** Replace every literal occurrence in each row; omitted replacement removes matches. */
+export function replaceLines(lines: Iterable<string>, search: string, replacement?: string, options?: ReplacementOptions): string[];
+/** Preserve the BOM and all line endings while replacing literal text within each row. */
+export function replaceText(text: string, search: string, replacement?: string, options?: ReplacementOptions): string;
 
 declare const cleanary: {
   makeNormalizer: typeof makeNormalizer;
@@ -54,6 +63,8 @@ declare const cleanary: {
   analyzeText: typeof analyzeText;
   cleanText: typeof cleanText;
   findDuplicateText: typeof findDuplicateText;
+  replaceLines: typeof replaceLines;
+  replaceText: typeof replaceText;
   CleanaryValidationError: typeof CleanaryValidationError;
 };
 export default cleanary;

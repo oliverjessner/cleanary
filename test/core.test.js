@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   analyseLines, analyzeLines, cleanLines, findDuplicates, analyseText,
-  cleanText, findDuplicateText, makeNormalizer, CleanaryValidationError,
+  cleanText, findDuplicateText, replaceLines, replaceText, makeNormalizer, CleanaryValidationError,
 } = require('../src');
 
 test('counts groups and duplicate occurrences separately', () => {
@@ -65,4 +65,52 @@ test('ESM adapter exposes named and default exports', async () => {
   const module = await import('../src/index.mjs');
   assert.equal(module.cleanText('a\na\n'), 'a\n');
   assert.equal(typeof module.default.analyseLines, 'function');
+  assert.equal(module.replaceText('old old\n', 'old', 'new'), 'new new\n');
+  assert.deepEqual(module.replaceLines(['x'], 'x'), ['']);
+  assert.equal(module.default.replaceText, replaceText);
+});
+
+test('replacement changes all literal matches in every row without deduplicating or mutating rows', () => {
+  const rows = ['FMA warnt vor Angeboten der Firma', 'FMA warnt vor Angeboten der Firma', 'x x', ''];
+  assert.deepEqual(replaceLines(rows, 'FMA warnt vor Angeboten der '), ['Firma', 'Firma', 'x x', '']);
+  assert.deepEqual(rows, ['FMA warnt vor Angeboten der Firma', 'FMA warnt vor Angeboten der Firma', 'x x', '']);
+  assert.equal(replaceText('x x\nx\nx\n', 'x', 'y'), 'y y\ny\ny\n');
+  assert.deepEqual(replaceLines(new Set(['foo', 'bar']), 'o', 'a'), ['faa', 'bar']);
+  assert.equal(replaceText('unchanged', 'missing', 'value'), 'unchanged');
+});
+
+test('search metacharacters and replacement dollar tokens are literal in both case modes', () => {
+  const search = '.*+?^${}()|[]\\/';
+  const replacement = '$& $$ $1 $` $\'';
+  for (const options of [{}, { caseSensitive: false }]) {
+    assert.equal(replaceText(`${search} ${search}\n`, search, replacement, options), `${replacement} ${replacement}\n`);
+  }
+  assert.equal(replaceText('Old OLD old', 'old', 'new'), 'Old OLD new');
+  assert.equal(replaceText('Old OLD old', 'old', 'new', { caseSensitive: false }), 'new new new');
+  assert.equal(replaceText('Ärger ÄRGER ärger', 'ärger', 'OK', { caseSensitive: false }), 'OK OK OK');
+});
+
+test('replacement preserves BOM, duplicate and empty rows, mixed newlines and missing final newline', () => {
+  const input = '\uFEFFx\r\n\nx\rx x\nx';
+  assert.equal(replaceText(input, 'x', 'y'), '\uFEFFy\r\n\ny\ry y\ny');
+  assert.equal(replaceText('x\r\nx\n', 'x'), '\r\n\n');
+  assert.equal(replaceText('', 'x'), '');
+  assert.equal(replaceText('\uFEFF', 'x'), '\uFEFF');
+});
+
+test('replacement rejects invalid inputs and multiline search or replacement strings', () => {
+  const invalid = [
+    () => replaceText(null, 'x'),
+    () => replaceText('x', ''),
+    () => replaceText('x', /x/),
+    () => replaceText('x', 'x', null),
+    () => replaceText('x', 'x\ny'),
+    () => replaceText('x', 'x', '\r'),
+    () => replaceText('x', 'x', '', null),
+    () => replaceText('x', 'x', '', []),
+    () => replaceText('x', 'x', '', { caseSensitive: 'false' }),
+    () => replaceLines(['x', 2], 'x'),
+    () => replaceLines('x', 'x'),
+  ];
+  for (const call of invalid) assert.throws(call, CleanaryValidationError);
 });

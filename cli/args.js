@@ -7,7 +7,7 @@ class CliArgumentError extends Error {
   }
 }
 
-const COMMANDS = new Set(['analyse', 'analyze', 'clean', 'duplicates']);
+const COMMANDS = new Set(['analyse', 'analyze', 'clean', 'duplicates', 'replace']);
 const FLAGS = new Set(['help', 'version', 'ignore-case', 'case-sensitive', 'trim', 'json', 'counts', 'stdout', 'verbose', 'check', 'no-color']);
 const VALUES = new Set(['mode', 'filepath', 'output', 'top', 'max-bytes']);
 const SHORT = new Map([['-h','--help'], ['-v','--version'], ['-o','--filepath']]);
@@ -42,8 +42,21 @@ function parseArgs(argv) {
     opts.command = positionals.shift();
     if (opts.command === 'analyze') opts.command = 'analyse';
   }
-  if (positionals.length > 1) throw new CliArgumentError('expected zero or one input file');
-  opts.input = positionals[0];
+  if (opts.command === 'replace') {
+    if (!opts.help && !opts.version && positionals.length < 2) {
+      throw new CliArgumentError('usage: cleanary replace <file|-> <search> [replacement] [options]');
+    }
+    if (positionals.length > 3) throw new CliArgumentError('replace expects an input file, search text and optional replacement text');
+    [opts.input, opts.search, opts.replacement = ''] = positionals;
+    if (opts.search !== undefined && (!opts.search.length || /[\r\n]/.test(opts.search))) {
+      throw new CliArgumentError('search must be a non-empty single-line string');
+    }
+    if (/[\r\n]/.test(opts.replacement)) throw new CliArgumentError('replacement must be a single-line string');
+    if (opts.trim) throw new CliArgumentError('--trim is not supported for replace');
+  } else {
+    if (positionals.length > 1) throw new CliArgumentError('expected zero or one input file');
+    opts.input = positionals[0];
+  }
   if (used.has('output') && used.has('filepath')) throw new CliArgumentError('--output conflicts with --filepath');
   opts.filepath = opts.filepath ?? opts.output;
   if (opts.stdout && opts.filepath) throw new CliArgumentError('--stdout conflicts with --filepath');
@@ -52,7 +65,7 @@ function parseArgs(argv) {
   opts.mode ??= 'dedupe';
   if (opts.counts && opts.command !== 'duplicates') throw new CliArgumentError('--counts is only supported for duplicates');
   if (opts.check && opts.command !== 'analyse') throw new CliArgumentError('--check is only supported for analyse');
-  if (opts.json && opts.command === 'clean') throw new CliArgumentError('--json is not supported for clean; its output is plain text');
+  if (opts.json && ['clean', 'replace'].includes(opts.command)) throw new CliArgumentError(`--json is not supported for ${opts.command}; its output is plain text`);
   if (opts.json && opts.counts) throw new CliArgumentError('--json conflicts with --counts');
   if (used.has('top') && opts.command !== 'analyse') throw new CliArgumentError('--top is only supported for analyse');
   if (used.has('top')) {

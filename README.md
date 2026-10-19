@@ -2,8 +2,8 @@
 
 > **Keep only what matters.**
 
-Cleanary is a small, dependency-free text-line deduplication toolkit for your terminal and Node.js apps.
-Count repeated lines, inspect how often they appear, and remove either extra copies or every repeated value. The CLI reads UTF-8 files or stdin and writes plain text to stdout or a new file.
+Cleanary is a small, dependency-free toolkit for cleaning text lines in your terminal and Node.js apps.
+Count repeated lines, remove extra copies or every repeated value, and replace literal text across all rows. The CLI reads UTF-8 files or stdin and writes plain text to stdout or a new file.
 
 ## Install
 
@@ -69,6 +69,16 @@ cleanary duplicates urls.txt --json
 
 `duplicates` prints each repeated value **once**, ordered by frequency. `--counts` prefixes the count and a tab; `--json` includes each value, count and original line number.
 
+### Replace or remove text in every row
+
+```bash
+cleanary replace headlines.txt "FMA warnt vor Angeboten der " "" -o headlines-clean.txt
+cleanary replace headlines.txt "old name" "new name" --ignore-case
+cat headlines.txt | cleanary replace - "unwanted prefix " > headlines-clean.txt
+```
+
+`replace` changes every literal occurrence in each row. Omit the replacement or pass `""` to remove matches. It retains duplicate and empty rows, the BOM, and all original line endings. Search and replacement are single-line strings; punctuation and dollar signs are literal. Use `-` explicitly for stdin.
+
 ### Use pipes and other tools
 
 ```bash
@@ -91,7 +101,7 @@ cleanary duplicates urls.txt --counts --filepath ./reports/
 ## Use Cleanary in Node.js
 
 ```js
-const { analyseText, cleanText, findDuplicates } = require('cleanary');
+const { analyseText, cleanText, findDuplicates, replaceText } = require('cleanary');
 
 const text = 'Apple\nBanana\napple\nApple\n';
 const report = analyseText(text, { caseSensitive: false });
@@ -101,6 +111,7 @@ const groups = findDuplicates(['A', 'B', 'A']);
 console.log(report.extraOccurrences); // 2
 console.log(rows); // Apple\nBanana\n
 console.log(groups); // [{ value: 'A', count: 2, firstLine: 1 }]
+console.log(replaceText('old old\n', 'old', 'new')); // 'new new\n'
 ```
 
 Both CommonJS and ESM named imports are supported. TypeScript declarations are included. Use `normalize: value => ...` to add project-specific matching rules without changing the core.
@@ -109,6 +120,7 @@ Both CommonJS and ESM named imports are supported. TypeScript declarations are i
 
 - **Exact matching** is the default; `--ignore-case` enables Unicode lowercasing, and `--trim` optionally ignores outer whitespace **for comparison only**.
 - Both modes keep the original order and retained line contents; LF/CRLF style and trailing newline are preserved for uniform-input files. Mixed endings are normalized to the first encountered style.
+- `replace` changes literal text within rows and preserves all original line endings, including mixed endings. It supports `--ignore-case` and the same file output options.
 - Empty lines count as rows. Files must be UTF-8. An initial UTF-8 BOM is accepted.
 - The CLI has a configurable 128 MiB input limit (`--max-bytes`). Analysis and cleaning are in-memory in v0.1.0, so available RAM also matters.
 - `--check` on `analyse` exits with code **3** when duplicates exist, useful for CI. Invalid arguments exit **2**; input/output errors exit **1**.

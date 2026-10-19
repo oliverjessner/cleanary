@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 
 function decodeText(buffer) {
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(buffer);
   } catch {
     const error = new Error('input is not valid UTF-8 text');
     error.code = 'INVALID_UTF8';

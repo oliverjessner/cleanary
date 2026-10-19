@@ -8,6 +8,8 @@ export const {
   analyzeText,
   cleanText,
   findDuplicateText,
+  replaceLines,
+  replaceText,
   makeNormalizer,
   CleanaryValidationError,
 } = cleanary;

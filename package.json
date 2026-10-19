@@ -1,10 +1,11 @@
 {
     "name": "cleanary",
-    "version": "0.1.2",
-    "description": "Count and remove duplicate text lines. A small, dependency-free Node.js CLI and library.",
+    "version": "0.1.3",
+    "description": "Count and remove duplicate text lines, or replace literal text. A dependency-free Node.js CLI and library.",
     "keywords": [
         "duplicates",
         "deduplicate",
+        "replace",
         "unique",
         "lines",
         "cli",

@@ -10,18 +10,20 @@ const HELP = `Cleanary ${pkg.version} — Keep only what matters.
 Usage: cleanary [analyse] [file|-] [options]
        cleanary clean [file|-] [--mode dedupe|unique] [options]
        cleanary duplicates [file|-] [--counts|--json] [options]
+       cleanary replace <file|-> <search> [replacement] [options]
 
 Commands:
   analyse       Count duplicates and show the most frequent rows (default)
   clean         Emit cleaned text, preserving the first occurrence by default
   duplicates    Emit each repeated value once, in frequency order
+  replace       Replace all literal matches in each row (default replacement: empty)
 
 Modes (clean only):
   dedupe        Remove extra copies, retain one row per value (default)
   unique        Remove ALL occurrences of repeated values, keep singletons
 
 Options:
-  --ignore-case                Compare without case sensitivity
+  --ignore-case                Match without case sensitivity
   --case-sensitive             Compare exactly (default)
   --trim                       Ignore leading/trailing spaces when comparing
   --mode dedupe|unique         Select clean mode
@@ -37,8 +39,9 @@ Options:
   --help, -h                   Show help
   --version, -v                Show version
 
-A file is optional; with no file, input comes from stdin. Use '-' explicitly for stdin.
-The original line contents and order are retained; matching only changes keys.
+Input defaults to stdin for analyse, clean and duplicates. For replace, use '-' for stdin.
+Replacement uses literal single-line strings and preserves every row and line ending.
+Duplicate matching preserves the original retained row contents.
 
 Examples:
   cleanary analyse urls.txt
@@ -46,6 +49,8 @@ Examples:
   cat urls.txt | cleanary clean --mode dedupe > clean.txt
   cleanary clean urls.txt --mode unique --filepath ./unique.txt
   cleanary duplicates urls.txt --counts
+  cleanary replace headlines.txt "FMA warnt vor Angeboten der " "" -o headlines-clean.txt
+  cleanary replace - "old" "new" --ignore-case
   fetchary extract links https://example.com --list | cleanary clean
 `;
 
@@ -91,6 +96,8 @@ async function execute(argv, io = {}) {
     } else if (options.command === 'duplicates') {
       report = api.analyseText(input, matching);
       output = formatDuplicates(report.duplicates, options);
+    } else if (options.command === 'replace') {
+      output = api.replaceText(input, options.search, options.replacement, { caseSensitive: options.caseSensitive });
     } else {
       report = api.analyseText(input, matching);
       output = api.cleanText(input, { ...matching, mode: options.mode });
@@ -100,7 +107,11 @@ async function execute(argv, io = {}) {
       await saveOutput(file, output);
       if (options.verbose) stderr.write(`Wrote ${file}\n`);
     } else stdout.write(output);
-    if (options.verbose) stderr.write(`Analysed ${report.totalLines} rows; ${report.extraOccurrences} extra occurrences in ${report.duplicateGroups} groups.\n`);
+    if (options.verbose) {
+      stderr.write(report
+        ? `Analysed ${report.totalLines} rows; ${report.extraOccurrences} extra occurrences in ${report.duplicateGroups} groups.\n`
+        : 'Applied literal text replacement.\n');
+    }
     return options.check && report.duplicateGroups > 0 ? 3 : 0;
   } catch (error) {
     const usageError = error instanceof CliArgumentError || error instanceof api.CleanaryValidationError || error.code === 'INVALID_UTF8';

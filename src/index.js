@@ -129,6 +129,40 @@ function findDuplicateText(text, options = {}) {
   return findDuplicates(splitText(text).lines, options);
 }
 
+function makeReplacer(search, replacement, options) {
+  if (typeof search !== 'string' || !search.length || /[\r\n]/.test(search)) {
+    throw new CleanaryValidationError('search must be a non-empty single-line string');
+  }
+  if (typeof replacement !== 'string' || /[\r\n]/.test(replacement)) {
+    throw new CleanaryValidationError('replacement must be a single-line string');
+  }
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new CleanaryValidationError('options must be an object');
+  }
+  if (options.caseSensitive !== undefined && typeof options.caseSensitive !== 'boolean') {
+    throw new CleanaryValidationError('caseSensitive must be a boolean');
+  }
+  const pattern = options.caseSensitive === false
+    ? new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu')
+    : search;
+  return (value) => options.caseSensitive === false
+    ? value.replace(pattern, () => replacement)
+    : value.replaceAll(pattern, () => replacement);
+}
+
+function replaceLines(lines, search, replacement = '', options = {}) {
+  const replace = makeReplacer(search, replacement, options);
+  return toLines(lines).map(replace);
+}
+
+function replaceText(text, search, replacement = '', options = {}) {
+  if (typeof text !== 'string') throw new CleanaryValidationError('text must be a string');
+  const replace = makeReplacer(search, replacement, options);
+  const bom = text.startsWith('\uFEFF') ? '\uFEFF' : '';
+  const body = bom ? text.slice(1) : text;
+  return bom + body.replace(/[^\r\n]+/g, replace);
+}
+
 module.exports = {
   analyseLines,
   analyzeLines,
@@ -138,6 +172,8 @@ module.exports = {
   analyzeText,
   cleanText,
   findDuplicateText,
+  replaceLines,
+  replaceText,
   makeNormalizer,
   CleanaryValidationError,
 };

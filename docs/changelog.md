@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Add `cleanary replace <file|-> <search> [replacement]` to replace all literal matches per row, with optional case-insensitive matching and empty replacement by default.
+- Expose `replaceText` and `replaceLines` through CommonJS, ESM, and TypeScript declarations.
+- Preserve duplicate and empty rows, the UTF-8 BOM and exact line endings during replacement; support the existing exclusive file and directory output options.
+- Preserve the UTF-8 BOM when reading CLI input for all commands.
+
 ## 0.1.1
 
 - Publish the Homebrew formula through the local `../homebrew-tap` checkout with `npm run brew:publish`, using existing Git credentials.
