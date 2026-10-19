@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Bypass cached npm tarball 404 responses on Homebrew download retries and show concise publish errors.
+
 ## 0.1.3
 
 - Add `cleanary replace <file|-> <search> [replacement]` to replace all literal matches per row, with optional case-insensitive matching and empty replacement by default.

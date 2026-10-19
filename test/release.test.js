@@ -13,6 +13,42 @@ test('Homebrew formula renders reproducibly with vetted sha256', async () => {
   assert.throws(() => renderFormula('0.1.0', 'abc'));
 });
 
+test('tarball download bypasses cached 404 responses without changing the formula URL', async () => {
+  const { downloadTarball } = await import('../scripts/generate-homebrew-formula.mjs');
+  const tarball = 'https://registry.npmjs.org/cleanary/-/cleanary-0.1.3.tgz';
+  const requests = [];
+  const waits = [];
+  const bytes = await downloadTarball(tarball, {
+    wait: async (ms) => waits.push(ms),
+    fetchImpl: async (url, options) => {
+      requests.push(url);
+      assert.equal(options.headers['Cache-Control'], 'no-cache');
+      return requests.length < 3 ? new Response(null, { status: 404 }) : new Response('package tarball');
+    },
+  });
+  assert.equal(bytes.toString(), 'package tarball');
+  assert.equal(requests[0], tarball);
+  for (const request of requests.slice(1)) {
+    const url = new URL(request);
+    assert.equal(`${url.origin}${url.pathname}`, tarball);
+    assert.ok(url.searchParams.has('cleanary_retry'));
+  }
+  assert.notEqual(requests[1], requests[2]);
+  assert.deepEqual(waits, [1500, 3000]);
+});
+
+test('tarball download has bounded retries and fails immediately on denied access', async () => {
+  const { downloadTarball } = await import('../scripts/generate-homebrew-formula.mjs');
+  for (const status of [404, 429, 503, 403]) {
+    let requests = 0;
+    await assert.rejects(downloadTarball('https://registry.npmjs.org/cleanary/-/cleanary-0.1.3.tgz', {
+      wait: async () => {},
+      fetchImpl: async () => { requests++; return new Response(null, { status }); },
+    }), new RegExp(`HTTP ${status}.*published on npm first`));
+    assert.equal(requests, status === 403 ? 1 : 6);
+  }
+});
+
 test('release validation rejects wrong tags, unstable versions and inconsistent lockfiles', async () => {
   const { validateRelease } = await import('../scripts/check-release.mjs');
   const pkg = { name: 'cleanary', version: '0.1.0' };

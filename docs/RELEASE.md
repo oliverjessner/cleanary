@@ -10,6 +10,8 @@ npm run brew:publish
 
 This downloads that version's published npm tarball, computes its SHA-256, and generates `Formula/cleanary.rb`. It then fast-forwards the local `../homebrew-tap` checkout, writes the formula there, commits only that file, and pushes to `origin/main` using your existing Git credentials. No tap token or GitHub API setup is needed. `npm run brew:push` is an alias for the same command.
 
+The command publishes only the Homebrew formula; the package version must already exist on npm. Immediately after npm publication, a cached 404 can temporarily hide the tarball. Downloads retry with fresh query parameters while the generated formula retains the canonical npm URL. If all retries fail, rerun the command once the tarball is available.
+
 The tap must be a clean Git checkout on `main` with an `origin` remote and no unpushed commits. Existing local work is left untouched if these checks fail. An unchanged formula does not create another commit. If the push fails after committing, retry it from the tap with `git -C ../homebrew-tap push origin main`.
 
 To generate a formula for inspection without committing or pushing:

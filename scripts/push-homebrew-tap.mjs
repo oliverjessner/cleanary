@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { generateFormula } from './generate-homebrew-formula.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const formulaPath = 'Formula/cleanary.rb';
@@ -49,12 +50,14 @@ export async function pushFormula({ tapDir, version, contents }) {
 }
 
 if (import.meta.main) {
-  const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  execFileSync(process.execPath, [path.join(root, 'scripts/generate-homebrew-formula.mjs')], {
-    cwd: root, stdio: 'inherit',
-  });
-  const contents = await readFile(path.join(root, 'dist/Formula/cleanary.rb'), 'utf8');
-  const tapDir = path.resolve(root, '../homebrew-tap');
-  const updated = await pushFormula({ tapDir, version: pkg.version, contents });
-  console.log(`${updated ? 'Published' : 'Already up to date:'} Formula/cleanary.rb in ${tapDir} for ${pkg.version}`);
+  try {
+    const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+    const contents = await generateFormula(pkg.version);
+    const tapDir = path.resolve(root, '../homebrew-tap');
+    const updated = await pushFormula({ tapDir, version: pkg.version, contents });
+    console.log(`${updated ? 'Published' : 'Already up to date:'} Formula/cleanary.rb in ${tapDir} for ${pkg.version}`);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exitCode = 1;
+  }
 }
