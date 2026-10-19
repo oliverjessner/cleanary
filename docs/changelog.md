@@ -7,3 +7,4 @@
 - UTF-8 file and stdin input; stdout and exclusive output files; optional case-insensitive and trimmed matching.
 - Structured JSON analysis, repeated-group counts, and CI-friendly duplicate check exit code.
 - GitHub Actions test and release workflows for npm Trusted Publishing and Homebrew tap updates.
+- Stable releases validate matching package/lockfile versions before publication; the Homebrew job can be retried separately and skips unchanged formulas.

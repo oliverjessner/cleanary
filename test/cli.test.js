@@ -5,6 +5,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { version } = require('../package.json');
 const CLI = path.resolve(__dirname, '../cli/index.js');
 
 function run(args = [], input = '') {
@@ -12,7 +13,7 @@ function run(args = [], input = '') {
 }
 
 test('CLI version and help', () => {
-  assert.equal(run(['--version']).stdout.trim(), '0.1.0');
+  assert.equal(run(['--version']).stdout.trim(), version);
   assert.match(run(['--help']).stdout, /Cleanary .*Keep only what matters/);
 });
 

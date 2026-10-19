@@ -22,6 +22,8 @@
     "test": "node --test test/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.js",
     "pack:check": "npm pack --dry-run",
-    "brew:formula": "node scripts/generate-homebrew-formula.mjs"
+    "release:check": "node scripts/check-release.mjs",
+    "brew:formula": "node scripts/generate-homebrew-formula.mjs",
+    "brew:push": "node scripts/push-homebrew-tap.mjs"
   }
 }
