@@ -1,10 +1,30 @@
 # Publishing Cleanary to npm and Homebrew
 
-Publishing a stable GitHub release runs `.github/workflows/publish.yml`: it validates the tag and package versions, runs the tests, publishes to npm, and then updates the separate Homebrew tap. **The maintainer must first configure npm Trusted Publishing and the tap token below.** Pushes to `main` and pull requests run `.github/workflows/test.yml` without publishing.
+## Publish to the local Homebrew tap
 
-## 1. Bootstrap the npm package name (one-time)
+After the current `package.json` version is available on npm, run:
 
-Confirm `cleanary` is available in the npm registry and that the npm account has rights to publish it. The initial npm release may need to be completed interactively to create the package before Trusted Publishing can be configured. From a clean checkout using Node.js 26:
+```bash
+npm run brew:publish
+```
+
+This downloads that version's published npm tarball, computes its SHA-256, and generates `Formula/cleanary.rb`. It then fast-forwards the local `../homebrew-tap` checkout, writes the formula there, commits only that file, and pushes to `origin/main` using your existing Git credentials. No tap token or GitHub API setup is needed. `npm run brew:push` is an alias for the same command.
+
+The tap must be a clean Git checkout on `main` with an `origin` remote and no unpushed commits. Existing local work is left untouched if these checks fail. An unchanged formula does not create another commit. If the push fails after committing, retry it from the tap with `git -C ../homebrew-tap push origin main`.
+
+To generate a formula for inspection without committing or pushing:
+
+```bash
+npm run brew:formula
+# Or specify an already published version and an exact destination:
+node scripts/generate-homebrew-formula.mjs 0.1.1 dist/Formula/cleanary.rb
+```
+
+Generated files under `dist/` are ignored in Cleanary. The published formula lives in `oliverjessner/homebrew-tap`.
+
+## Publish the npm package
+
+For a local npm release, use Node.js 26 or newer and a version that has not already been published:
 
 ```bash
 npm ci
@@ -12,58 +32,30 @@ npm test
 npm run pack:check
 npm login
 npm publish --access public
+npm run brew:publish
 ```
 
-**Do not publish a version that already exists.** After this initial `0.1.0` release, bump `package.json` and `package-lock.json` to the next version (for example `0.1.1`) for automated releases. Never commit tokens to source control.
+Never commit credentials or republish an existing npm version. Keep `package.json`, both version fields in `package-lock.json`, and the changelog aligned.
 
-## 2. Configure Trusted Publishing on npmjs.com
+## Optional npm publication through GitHub Actions
 
-For npm package `cleanary`, add a GitHub Actions trusted publisher with user `oliverjessner`, repo `cleanary`, and workflow filename `publish.yml` (only the filename, no path). Leave the optional environment empty; the workflow does not use a GitHub environment. **Explicitly grant permission for `npm publish`** in the trusted publisher's allowed actions. GitHub Actions uses OIDC (`id-token: write`) and `npm publish --access public --provenance`, so no persistent npm token is needed. See the [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/).
+For npm package `cleanary`, configure a GitHub Actions trusted publisher with user `oliverjessner`, repository `cleanary`, and workflow filename `publish.yml`. Leave the optional environment empty and grant permission for `npm publish`. See the [npm Trusted Publishing documentation](https://docs.npmjs.com/trusted-publishers/).
 
-## 3. Configure Homebrew tap access
+Publish a stable GitHub release tagged `vX.Y.Z` at the commit containing that package version. `.github/workflows/publish.yml` validates the tag and package/lockfile versions, runs tests and the package dry run on Node.js 26, and publishes to npm using OIDC and provenance. Drafts, prereleases and ordinary Git pushes do not publish npm packages. Pushes to `main` and pull requests run `.github/workflows/test.yml` without publishing.
 
-There is a separate public repository at `oliverjessner/homebrew-tap`. Add `HOMEBREW_TAP_TOKEN` as a GitHub Actions repository secret in `oliverjessner/cleanary`. It should be a **fine-grained token** restricted to `oliverjessner/homebrew-tap` with **Contents: Read and write**, and no unnecessary scopes. The workflow checks that it exists before attempting npm publication.
+After npm publication, run `npm run brew:publish` locally to update the neighboring tap. GitHub Actions does not update the tap.
 
-The generated formula uses the actual published npm tarball and its SHA-256. The workflow updates `Formula/cleanary.rb` on the tap's default `main` branch. Only this path is modified. Review the token permissions and the formula before enabling this automation.
-
-The update uses the GitHub Contents API to commit directly to `oliverjessner/homebrew-tap`. It does not use or modify the local `../homebrew-tap` checkout. The tap must allow the token to commit to `main`; branch rules requiring pull requests will block this update. The built-in `GITHUB_TOKEN` belongs to Cleanary and cannot replace the separate tap token.
-
-## 4. Release
-
-Update `package.json`, both version fields in `package-lock.json`, and the changelog, then commit and merge to `main`. Create and publish a matching stable GitHub release tagged `vX.Y.Z` at that commit. Drafts, prereleases and ordinary Git pushes do not publish packages. A prerelease version such as `0.2.0-beta.1` is rejected if marked as a stable release.
-
-The `publish` job verifies that the tag matches `package.json` and `package-lock.json`, requires `HOMEBREW_TAP_TOKEN` before npm publication, runs tests and the package dry run on Node.js 26, and publishes the package using npm Trusted Publishing. The dependent `homebrew` job downloads that version's npm tarball, computes its SHA-256, and commits the generated formula to the tap. Release runs are serialized so they do not update the formula concurrently.
-
-If npm publication succeeds but the tap update fails, fix the token or tap permissions and select **Re-run failed jobs** in GitHub Actions. This reruns `homebrew` without trying to publish the immutable npm version again. An unchanged formula is detected and does not create another commit. Do not rerun all jobs after a successful npm publication.
-
-Validate the release metadata locally before tagging:
+Validate release metadata before tagging, using the current package version:
 
 ```bash
-npm run release:check -- v0.1.0
+npm run release:check -- v0.1.1
 ```
 
-Use the actual version from `package.json`. A mismatched tag or lockfile fails before publication.
-
-Manual formula generation after npm publication is also supported:
+## Installation checks
 
 ```bash
-npm run brew:formula
-# Or specify the published version and an exact destination:
-node scripts/generate-homebrew-formula.mjs 0.1.0 dist/Formula/cleanary.rb
-```
-
-To update the tap manually for the current `package.json` version, first generate its formula with `npm run brew:formula`, then run `npm run brew:push` with `HOMEBREW_TAP_TOKEN` supplied through your environment. This command creates a remote commit; keep the token out of source files and shell history.
-
-The generated `dist/Formula/cleanary.rb` is not committed to Cleanary. The published Homebrew formula lives in `oliverjessner/homebrew-tap`.
-
-Once both channels are published, end users can run:
-
-```bash
-npm install --global cleanary
-# or
+npm view cleanary version
+brew update
+brew info oliverjessner/tap/cleanary
 brew install oliverjessner/tap/cleanary
 ```
-
-Useful checks: `npm view cleanary version`, `brew update`, `brew info oliverjessner/tap/cleanary`, and `brew audit --tap=oliverjessner/tap cleanary` where supported.
-
-Security notes: no long-lived npm token is needed for recurring releases; the tap's GitHub token is scoped to one repository. The CLI will not overwrite existing files. The Homebrew tap should never point to placeholder hashes or unversioned archives.

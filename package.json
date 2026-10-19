@@ -56,6 +56,7 @@
         "pack:check": "npm pack --dry-run",
         "release:check": "node scripts/check-release.mjs",
         "brew:formula": "node scripts/generate-homebrew-formula.mjs",
-        "brew:push": "node scripts/push-homebrew-tap.mjs"
+        "brew:publish": "node scripts/push-homebrew-tap.mjs",
+        "brew:push": "npm run brew:publish"
     }
 }

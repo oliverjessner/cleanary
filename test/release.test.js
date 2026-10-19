@@ -31,70 +31,91 @@ test('release validation rejects wrong tags, unstable versions and inconsistent 
   assert.throws(() => validateRelease('v0.1.0', { ...pkg, name: 'other' }, lock), /describe cleanary/);
 });
 
-test('Homebrew update creates or updates only the formula on main with the matching file SHA', async () => {
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+function git(cwd, ...args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
+
+function tapFixture(t) {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'cleanary-tap-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const remote = path.join(folder, 'remote.git');
+  const seed = path.join(folder, 'seed');
+  const tapDir = path.join(folder, 'tap');
+  git(folder, 'init', '--bare', '--initial-branch=main', remote);
+  git(folder, 'init', '--initial-branch=main', seed);
+  for (const [key, value] of [['user.name', 'Cleanary Test'], ['user.email', 'test@example.invalid'], ['commit.gpgsign', 'false']]) {
+    git(seed, 'config', key, value);
+  }
+  fs.writeFileSync(path.join(seed, 'README.md'), 'Original tap\n');
+  git(seed, 'add', 'README.md');
+  git(seed, 'commit', '-m', 'Initial tap');
+  git(seed, 'remote', 'add', 'origin', remote);
+  git(seed, 'push', '-u', 'origin', 'main');
+  git(folder, 'clone', remote, tapDir);
+  for (const [key, value] of [['user.name', 'Cleanary Test'], ['user.email', 'test@example.invalid'], ['commit.gpgsign', 'false']]) {
+    git(tapDir, 'config', key, value);
+  }
+  return { tapDir, seed, remote };
+}
+
+test('local Homebrew publication fast-forwards, commits only the formula and pushes it', async (t) => {
   const { pushFormula } = await import('../scripts/push-homebrew-tap.mjs');
   const { renderFormula } = await import('../scripts/formula.mjs');
-  const contents = renderFormula('0.1.0', 'a'.repeat(64));
-  const endpoint = 'https://api.github.com/repos/oliverjessner/homebrew-tap/contents/Formula/cleanary.rb';
-  for (const exists of [false, true]) {
-    const requests = [];
-    const updated = await pushFormula({
-      token: 'test-token', version: '0.1.0', contents: Buffer.from(contents),
-      fetchImpl: async (url, options) => {
-        requests.push({ url, options });
-        if (requests.length === 1) {
-          return exists
-            ? Response.json({ sha: 'existing-sha', content: Buffer.from('old formula').toString('base64') })
-            : new Response(null, { status: 404 });
-        }
-        return Response.json({}, { status: exists ? 200 : 201 });
-      },
-    });
-    assert.equal(updated, true);
-    assert.equal(requests.length, 2);
-    assert.equal(requests[0].url, `${endpoint}?ref=main`);
-    assert.equal(requests[1].url, endpoint);
-    assert.equal(requests[1].options.method, 'PUT');
-    assert.equal(requests[1].options.headers.Authorization, 'Bearer test-token');
-    const body = JSON.parse(requests[1].options.body);
-    assert.equal(body.branch, 'main');
-    assert.equal(body.sha, exists ? 'existing-sha' : undefined);
-    assert.equal(body.message, 'chore(cleanary): update Homebrew formula to 0.1.0');
-    assert.equal(Buffer.from(body.content, 'base64').toString('utf8'), contents);
-  }
+  const { tapDir, seed, remote } = tapFixture(t);
+  fs.writeFileSync(path.join(seed, 'README.md'), 'Upstream update\n');
+  git(seed, 'add', 'README.md');
+  git(seed, 'commit', '-m', 'Upstream change');
+  git(seed, 'push', 'origin', 'main');
+  const contents = renderFormula('0.1.1', 'a'.repeat(64));
+  assert.equal(await pushFormula({ tapDir, version: '0.1.1', contents }), true);
+  assert.equal(git(remote, 'show', 'main:Formula/cleanary.rb'), contents.trim());
+  assert.equal(git(tapDir, 'show', '--format=', '--name-only', 'HEAD'), 'Formula/cleanary.rb');
+  assert.equal(git(tapDir, 'show', '-s', '--format=%s'), 'chore(cleanary): update Homebrew formula to 0.1.1');
+  assert.equal(fs.readFileSync(path.join(tapDir, 'README.md'), 'utf8'), 'Upstream update\n');
+  assert.equal(git(tapDir, 'status', '--porcelain'), '');
+  const firstCommit = git(remote, 'rev-parse', 'main');
+  assert.equal(await pushFormula({ tapDir, version: '0.1.1', contents }), false);
+  assert.equal(git(remote, 'rev-parse', 'main'), firstCommit);
+
+  const nextContents = renderFormula('0.1.2', 'b'.repeat(64));
+  assert.equal(await pushFormula({ tapDir, version: '0.1.2', contents: nextContents }), true);
+  assert.equal(git(remote, 'show', 'main:Formula/cleanary.rb'), nextContents.trim());
 });
 
-test('repeating a Homebrew update does not create another commit', async () => {
+test('local publication preserves untracked, staged and unpushed work and refuses other branches', async (t) => {
   const { pushFormula } = await import('../scripts/push-homebrew-tap.mjs');
-  let calls = 0;
-  const updated = await pushFormula({
-    token: 'test-token', version: '0.1.0', contents: Buffer.from('same formula'),
-    fetchImpl: async () => {
-      calls++;
-      assert.equal(calls, 1, 'unchanged formula must not trigger a write');
-      return Response.json({ sha: 'existing-sha', content: 'c2FtZSBm\nb3JtdWxh\n' });
-    },
-  });
-  assert.equal(updated, false);
-  assert.equal(calls, 1);
+  const { tapDir, remote } = tapFixture(t);
+  const originalCommit = git(remote, 'rev-parse', 'main');
+  const options = { tapDir, version: '0.1.1', contents: 'new formula\n' };
+  const notes = path.join(tapDir, 'notes.txt');
+  fs.writeFileSync(notes, 'User work\n');
+  await assert.rejects(pushFormula(options), /local changes/);
+  assert.equal(fs.readFileSync(notes, 'utf8'), 'User work\n');
+  fs.rmSync(notes);
+
+  git(tapDir, 'switch', '-c', 'work');
+  await assert.rejects(pushFormula(options), /must be on main/);
+  git(tapDir, 'switch', 'main');
+
+  fs.writeFileSync(path.join(tapDir, 'README.md'), 'Staged user work\n');
+  git(tapDir, 'add', 'README.md');
+  await assert.rejects(pushFormula(options), /local changes/);
+  assert.equal(git(tapDir, 'diff', '--cached', '--name-only'), 'README.md');
+  git(tapDir, 'commit', '-m', 'Unpushed user work');
+  await assert.rejects(pushFormula(options), /unpushed commits/);
+  assert.equal(git(remote, 'rev-parse', 'main'), originalCommit);
+  assert.equal(fs.existsSync(path.join(tapDir, 'Formula/cleanary.rb')), false);
 });
 
-test('Homebrew update fails on missing credentials, denied reads and conflicting writes', async () => {
+test('local publication refuses a subdirectory of another Git checkout', async (t) => {
   const { pushFormula } = await import('../scripts/push-homebrew-tap.mjs');
-  const options = { token: 'test-token', version: '0.1.0', contents: Buffer.from('formula') };
-  await assert.rejects(pushFormula({
-    ...options, token: '', fetchImpl: async () => assert.fail('missing credentials must not make requests'),
-  }), /HOMEBREW_TAP_TOKEN is required/);
-  await assert.rejects(pushFormula({
-    ...options, fetchImpl: async () => new Response(null, { status: 403 }),
-  }), /GitHub read failed: HTTP 403/);
-  let calls = 0;
-  await assert.rejects(pushFormula({
-    ...options,
-    fetchImpl: async () => {
-      calls++;
-      return calls === 1 ? Response.json({ sha: 'old-sha' }) : new Response(null, { status: 409 });
-    },
-  }), /GitHub Homebrew tap update failed: HTTP 409/);
-  assert.equal(calls, 2);
+  const { tapDir } = tapFixture(t);
+  const nested = path.join(tapDir, 'nested');
+  fs.mkdirSync(nested);
+  await assert.rejects(pushFormula({ tapDir: nested, version: '0.1.1', contents: 'formula' }), /root of its own Git checkout/);
 });

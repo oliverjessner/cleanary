@@ -1,45 +1,60 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const endpoint = 'https://api.github.com/repos/oliverjessner/homebrew-tap/contents/Formula/cleanary.rb';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const formulaPath = 'Formula/cleanary.rb';
 
-export async function pushFormula({ token, version, contents, fetchImpl = fetch }) {
-  if (!token) throw new Error('HOMEBREW_TAP_TOKEN is required');
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'cleanary-release',
-  };
-  const existing = await fetchImpl(`${endpoint}?ref=main`, { headers });
-  if (!existing.ok && existing.status !== 404) throw new Error(`GitHub read failed: HTTP ${existing.status}`);
-  const current = existing.ok ? await existing.json() : undefined;
-  const content = Buffer.from(contents).toString('base64');
-  if (current?.content?.replace(/\s/g, '') === content) return false;
+export async function pushFormula({ tapDir, version, contents }) {
+  const cwd = await realpath(tapDir);
+  const git = (...args) => execFileSync('git', args, {
+    cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
 
-  const result = await fetchImpl(endpoint, {
-    method: 'PUT',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: `chore(cleanary): update Homebrew formula to ${version}`,
-      branch: 'main',
-      content,
-      ...(current ? { sha: current.sha } : {}),
-    }),
+  if (await realpath(git('rev-parse', '--show-toplevel')) !== cwd) {
+    throw new Error('Homebrew tap path must be the root of its own Git checkout');
+  }
+  if (git('branch', '--show-current') !== 'main') {
+    throw new Error('Homebrew tap must be on main');
+  }
+  if (git('status', '--porcelain')) {
+    throw new Error('Homebrew tap has local changes; commit or stash them before publishing');
+  }
+
+  git('fetch', 'origin', 'main');
+  if (git('rev-list', '--count', 'origin/main..HEAD') !== '0') {
+    throw new Error('Homebrew tap has unpushed commits; push or review them before publishing');
+  }
+  git('merge', '--ff-only', 'origin/main');
+
+  const target = path.join(cwd, formulaPath);
+  const current = await readFile(target, 'utf8').catch((error) => {
+    if (error.code !== 'ENOENT') throw error;
+    return undefined;
   });
-  if (!result.ok) throw new Error(`GitHub Homebrew tap update failed: HTTP ${result.status}`);
+  if (current === contents) return false;
+
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, contents, { mode: 0o644 });
+  git('add', '--', formulaPath);
+  git('commit', '--only', '-m', `chore(cleanary): update Homebrew formula to ${version}`, '--', formulaPath);
+  try {
+    git('-c', 'push.followTags=false', 'push', 'origin', 'HEAD:refs/heads/main');
+  } catch (error) {
+    throw new Error(`Formula committed locally but push failed. Retry with git -C ${cwd} push origin main`, { cause: error });
+  }
   return true;
 }
 
 if (import.meta.main) {
-  const token = process.env.HOMEBREW_TAP_TOKEN;
-  if (!token) throw new Error('HOMEBREW_TAP_TOKEN is required');
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
-  const file = process.argv[2] ?? path.join(root, 'dist/Formula/cleanary.rb');
-  const contents = await readFile(file);
-  const updated = await pushFormula({ token, version: pkg.version, contents });
-  console.log(`${updated ? 'Updated' : 'Already up to date:'} Formula/cleanary.rb in oliverjessner/homebrew-tap for ${pkg.version}`);
+  execFileSync(process.execPath, [path.join(root, 'scripts/generate-homebrew-formula.mjs')], {
+    cwd: root, stdio: 'inherit',
+  });
+  const contents = await readFile(path.join(root, 'dist/Formula/cleanary.rb'), 'utf8');
+  const tapDir = path.resolve(root, '../homebrew-tap');
+  const updated = await pushFormula({ tapDir, version: pkg.version, contents });
+  console.log(`${updated ? 'Published' : 'Already up to date:'} Formula/cleanary.rb in ${tapDir} for ${pkg.version}`);
 }

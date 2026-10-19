@@ -32,31 +32,8 @@ jobs:
         run: npm run release:check -- "$RELEASE_TAG"
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-      - name: Require Homebrew tap credentials before npm publication
-        run: node --input-type=module -e 'if (!process.env.HOMEBREW_TAP_TOKEN) throw new Error("Configure the HOMEBREW_TAP_TOKEN repository secret before publishing")'
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run pack:check
       - name: Publish to npm using Trusted Publishing
         run: npm publish --access public --provenance
-
-  homebrew:
-    needs: publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '26'
-          package-manager-cache: false
-      - name: Generate formula from the published npm tarball
-        run: npm run brew:formula
-      - name: Update Formula/cleanary.rb in oliverjessner/homebrew-tap
-        run: npm run brew:push
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

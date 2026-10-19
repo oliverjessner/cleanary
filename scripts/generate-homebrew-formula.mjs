@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderFormula } from './formula.mjs';
@@ -24,5 +24,6 @@ async function downloadTarball() {
 const tgz = await downloadTarball();
 const sha256 = createHash('sha256').update(tgz).digest('hex');
 await mkdir(path.dirname(target), { recursive: true });
-await writeFile(target, renderFormula(version, sha256), { mode: 0o600, flag: 'w' });
+await writeFile(target, renderFormula(version, sha256), { mode: 0o644, flag: 'w' });
+await chmod(target, 0o644);
 console.log(`Generated ${target}\nTarball SHA-256: ${sha256}`);
