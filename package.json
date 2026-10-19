@@ -1,0 +1,27 @@
+{
+  "name": "cleanary",
+  "version": "0.1.0",
+  "description": "Count and remove duplicate text lines. A small, dependency-free Node.js CLI and library.",
+  "keywords": ["duplicates", "deduplicate", "unique", "lines", "cli", "text", "nodejs"],
+  "homepage": "https://github.com/oliverjessner/cleanary#readme",
+  "bugs": { "url": "https://github.com/oliverjessner/cleanary/issues" },
+  "repository": { "type": "git", "url": "git+https://github.com/oliverjessner/cleanary.git" },
+  "author": { "name": "oliverjessner", "url": "https://oliverjessner.at" },
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": { "types": "./src/index.d.ts", "import": "./src/index.mjs", "require": "./src/index.js" }
+  },
+  "bin": { "cleanary": "./cli/index.js" },
+  "files": ["src", "cli", "README.md", "LICENSE", "docs"],
+  "engines": { "node": ">=26.0.0" },
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage test/*.test.js",
+    "pack:check": "npm pack --dry-run",
+    "brew:formula": "node scripts/generate-homebrew-formula.mjs"
+  }
+}
