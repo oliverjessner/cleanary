@@ -49,6 +49,23 @@ This prints `apple` and `banana`, each on its own line.
 
 See the [CLI documentation](docs/CLI.md) for all commands and options.
 
+## Library
+
+Use Cleanary in your Node.js scripts to clean lists directly.
+
+```bash
+npm install cleanary
+```
+
+```js
+import { cleanLines } from 'cleanary';
+
+const lines = cleanLines(['apple', 'apple', 'banana']);
+console.log(lines); // ['apple', 'banana']
+```
+
+See the [library documentation](docs/LIBRARY.md) for all functions and options.
+
 ## Find the most frequent lines
 
 Use `cleanary analyse urls.txt` to see how many lines repeat and which values occur most often. Use `cleanary duplicates urls.txt --counts` for a list of repeated values with counts, or add `--json` for structured output.
