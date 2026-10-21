@@ -1,139 +1,80 @@
-# Cleanary
+# Cleanary 🧹
 
-> **Keep only what matters.**
+[![CI](https://github.com/oliverjessner/cleanary/actions/workflows/test.yml/badge.svg)](https://github.com/oliverjessner/cleanary/actions/workflows/test.yml)
 
-Cleanary is a small, dependency-free toolkit for cleaning text lines in your terminal and Node.js apps.
-Count repeated lines, remove extra copies or every repeated value, and replace literal text across all rows. The CLI reads UTF-8 files or stdin and writes plain text to stdout or a new file.
+Cleanary is a command-line tool for cleaning text files one line at a time.
+It finds repeated lines, removes unwanted copies and replaces literal text.
+You can keep the original line order and save results without overwriting existing files.
+
+Start by analyzing a list of URLs, headlines or other text to see which lines repeat most often. Then choose whether to keep one copy of each line or only lines that appear once, and save the result to a new file or pass it to another command.
+
+## What it does
+
+- Count total lines, distinct values and extra copies.
+- List repeated values with occurrence counts or JSON output.
+- Keep one copy of each line, or remove every occurrence of repeated values.
+- Optionally ignore case and surrounding whitespace when comparing lines.
+- Replace or remove literal text across all lines.
+- Read UTF-8 files or piped input and save results to new files.
 
 ## Install
 
-Node.js 26 or newer is required.
+### Homebrew
 
-Once the package is released on npm:
-
-```bash
-npm install --global cleanary
-```
-
-For a Node.js project:
-
-```bash
-npm install cleanary
-```
-
-Once the Homebrew formula is released in [oliverjessner/homebrew-tap](https://github.com/oliverjessner/homebrew-tap):
+On macOS or Linux:
 
 ```bash
 brew install oliverjessner/tap/cleanary
 ```
 
-Before the first release, clone this repository and run `npm link` for local CLI usage.
+Homebrew installs Node.js as a dependency. Cleanary requires Node.js 26 or newer.
 
-## Examples
+### npm
 
-### Count duplicate rows
-
-```bash
-cleanary analyse urls.txt
-cleanary analyse urls.txt --ignore-case
-cleanary analyse urls.txt --json
-```
-
-For the input `a`, `b`, `a`, `a`, `c`, `b`, the report shows **6 total rows**, **3 distinct rows**, **2 duplicate groups** and **3 extra occurrences**. Groups are displayed in descending order of frequency.
-
-### Keep one copy of every row
+With Node.js 26 or newer on macOS, Linux or Windows:
 
 ```bash
-cleanary clean urls.txt --mode dedupe > deduped.txt
+npm install --global cleanary
 ```
 
-`dedupe` is the default mode. It keeps the first version of each row, in its original position. Even with `--ignore-case` or `--trim`, it does not rewrite the text of the retained rows.
+## CLI
 
-### Keep only truly unique rows
-
-Remove **every** occurrence of a value if that value appears more than once:
+Analyze duplicates, clean lists and replace text directly from your terminal.
 
 ```bash
-cleanary clean urls.txt --mode unique --filepath unique.txt
+printf 'apple\napple\nbanana\n' | cleanary clean
 ```
 
-Unlike `dedupe`, `unique` does not preserve one copy of repeated values. Only rows whose frequency is exactly one remain.
+This prints `apple` and `banana`, each on its own line.
 
-### Show which rows repeat
+See the [CLI documentation](docs/CLI.md) for all commands and options.
 
-```bash
-cleanary duplicates urls.txt
-cleanary duplicates urls.txt --counts
-cleanary duplicates urls.txt --json
-```
+## Find the most frequent lines
 
-`duplicates` prints each repeated value **once**, ordered by frequency. `--counts` prefixes the count and a tab; `--json` includes each value, count and original line number.
+Use `cleanary analyse urls.txt` to see how many lines repeat and which values occur most often. Use `cleanary duplicates urls.txt --counts` for a list of repeated values with counts, or add `--json` for structured output.
 
-### Replace or remove text in every row
+## Choose what to keep
 
-```bash
-cleanary replace headlines.txt "FMA warnt vor Angeboten der " "" -o headlines-clean.txt
-cleanary replace headlines.txt "old name" "new name" --ignore-case
-cat headlines.txt | cleanary replace - "unwanted prefix " > headlines-clean.txt
-```
+The default `clean` mode keeps the first copy of each line; `--mode unique` keeps only lines that appear once. Both preserve the order and text of retained lines, even when `--ignore-case` or `--trim` changes how duplicates are matched.
 
-`replace` changes every literal occurrence in each row. Omit the replacement or pass `""` to remove matches. It retains duplicate and empty rows, the BOM, and all original line endings. Search and replacement are single-line strings; punctuation and dollar signs are literal. Use `-` explicitly for stdin.
+## Replace text across a list
 
-### Use pipes and other tools
+Use `cleanary replace headlines.txt "old name" "new name"` to replace every literal match, or omit the replacement to remove matching text. Replacement preserves duplicate lines, empty lines and original line endings.
 
-```bash
-cat urls.txt | cleanary analyse
-cat urls.txt | cleanary clean --ignore-case > clean.txt
-fetchary extract links https://oliverjessner.at/sitemap.xml --list | cleanary clean
-```
+## Save results and connect commands
 
-`-` can also be used explicitly for stdin (`cleanary analyse -`). The CLI prints analysis results or cleaned rows to stdout. Diagnostics and errors go to stderr, so pipelines remain clean.
+Read from a file or pipe, then send the result to another command or save it with `--filepath cleaned.txt`. Cleanary leaves the input file untouched and refuses to overwrite existing output files when saving with `--filepath`.
 
-### Save without overwriting existing files
+## Who it is for
 
-```bash
-cleanary clean urls.txt --filepath ./cleaned.txt
-cleanary duplicates urls.txt --counts --filepath ./reports/
-```
+- Researchers cleaning lists of URLs, names or collected text.
+- Writers and editors removing repeated headlines or unwanted text.
+- Command-line users preparing text lists for other tools.
 
-`--filepath`, `--output`, and `-o` select the output. Existing files are never overwritten. With a directory, Cleanary generates a timestamped filename. New files are private (`0600` on POSIX).
+## Changelog
 
-## Use Cleanary in Node.js
-
-```js
-const { analyseText, cleanText, findDuplicates, replaceText } = require('cleanary');
-
-const text = 'Apple\nBanana\napple\nApple\n';
-const report = analyseText(text, { caseSensitive: false });
-const rows = cleanText(text, { caseSensitive: false, mode: 'dedupe' });
-const groups = findDuplicates(['A', 'B', 'A']);
-
-console.log(report.extraOccurrences); // 2
-console.log(rows); // Apple\nBanana\n
-console.log(groups); // [{ value: 'A', count: 2, firstLine: 1 }]
-console.log(replaceText('old old\n', 'old', 'new')); // 'new new\n'
-```
-
-Both CommonJS and ESM named imports are supported. TypeScript declarations are included. Use `normalize: value => ...` to add project-specific matching rules without changing the core.
-
-## Matching and data safety
-
-- **Exact matching** is the default; `--ignore-case` enables Unicode lowercasing, and `--trim` optionally ignores outer whitespace **for comparison only**.
-- Both modes keep the original order and retained line contents; LF/CRLF style and trailing newline are preserved for uniform-input files. Mixed endings are normalized to the first encountered style.
-- `replace` changes literal text within rows and preserves all original line endings, including mixed endings. It supports `--ignore-case` and the same file output options.
-- Empty lines count as rows. Files must be UTF-8. An initial UTF-8 BOM is accepted.
-- The CLI has a configurable 128 MiB input limit (`--max-bytes`). Analysis and cleaning are in-memory in v0.1.0, so available RAM also matters.
-- `--check` on `analyse` exits with code **3** when duplicates exist, useful for CI. Invalid arguments exit **2**; input/output errors exit **1**.
-
-The tool performs exact/key-based line matching, not fuzzy matching or URL canonicalization. Any extra matching logic belongs in a custom library normalizer or a future extension.
-
-## Documentation
-
-- [CLI reference](docs/CLI.md) – commands, flags, examples and exit codes.
-- [Library guide](docs/LIBRARY.md) – exports, schemas, custom normalization and TypeScript.
-- [Release guide](docs/RELEASE.md) – npm Trusted Publishing, GitHub releases and Homebrew tap.
-- [Changelog](docs/changelog.md) – releases and notable changes.
+See the [changelog](docs/changelog.md) for release notes and changes.
 
 ## License
 
-MIT © 2026 Oliver Jessner.
+MIT
